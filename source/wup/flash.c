@@ -3,37 +3,13 @@
 
 static u8 AddrMode;
 
-static u32 PartBase;
-static int PartNumEntries;
-static u32* PartHeader;
-
 
 int Flash_Init()
 {
     // TODO: check cmd 9F?
-#if 0
     Flash_Set4ByteAddr(1);
 
-    // load partition data
-    u8 partsel = 0;
-    Flash_Read(0xF000, &partsel, 1);
-    if (partsel == 1)
-        PartBase = 0x500000;
-    else
-        PartBase = 0x100000;
-
-    u32 tbllen = 0;
-    Flash_Read(PartBase+4, (u8*)&tbllen, 4);
-    if ((tbllen < 16) || (tbllen > 0x10000) || (tbllen & 0xF))
-        return 0;
-
-    PartHeader = (u32*)malloc(tbllen);
-    Flash_Read(PartBase, (u8*)PartHeader, tbllen);
-    PartNumEntries = tbllen >> 4;
-
     return 1;
-#endif
-    return 0;
 }
 
 
@@ -122,26 +98,44 @@ void Flash_Read(u32 addr, u8* data, int len)
         SPI_Write(cmd, 4);
     }
 
-    SPI_Read(data, len);
+    int kChunkLen = 0x100000; // DMA chunk
+    for (int i = 0; i < len; i += kChunkLen)
+    {
+        int chunk = kChunkLen;
+        if ((i + chunk) > len)
+            chunk = len - i;
+
+        SPI_Read(data, chunk);
+    }
+
     SPI_Finish();
 }
 
 
-int Flash_GetEntryInfo(char* tag, u32* offset, u32* length, u32* version)
+int Flash_GetCodeAddr(u32 partaddr, u32* codeaddr, u32* codelen)
 {
-    u32 tag32 = tag[0] | (tag[1] << 8) | (tag[2] << 16) | (tag[3] << 24);
-    u32* hdr = PartHeader;
-    for (int i = 0; i < PartNumEntries; i++)
-    {
-        if (hdr[2] == tag32)
-        {
-            if (offset) *offset = PartBase + hdr[0];
-            if (length) *length = hdr[1];
-            if (version) *version = hdr[3];
-            return 1;
-        }
+    // look for LVC_ blob
 
-        hdr += 4;
+    u32 tbllen = 0;
+    Flash_Read(partaddr+4, (u8*)&tbllen, 4);
+    if ((tbllen < 16) || (tbllen > 0x10000) || (tbllen & 0xF))
+        return 0;
+
+    for (u32 entry = 0x10; entry < tbllen; entry += 0x10)
+    {
+        u32 entrydata[4];
+        Flash_Read(partaddr+entry, (u8*)entrydata, 16);
+
+        if (entrydata[0] > 0x2000000) // offset
+            continue;
+        if (entrydata[1] > 0x400000) // length
+            continue;
+        if (entrydata[2] != 0x5F43564C) // LVC_
+            continue;
+
+        *codeaddr = partaddr + entrydata[0];
+        *codelen = entrydata[1];
+        return 1;
     }
 
     return 0;

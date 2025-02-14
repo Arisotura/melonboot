@@ -8,6 +8,7 @@ void DMA_IRQHandler(int irq, void* userdata);
 void DMA_Init()
 {
     // enable DMA
+    // CHECKME they set it to 0003 in the stock bootloader
     REG_DMA_CNT |= 0x8001;
     REG_DMA_CNT &= ~0xFC;
 

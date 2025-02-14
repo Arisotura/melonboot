@@ -12,8 +12,8 @@ MEMORY
     ram : ORIGIN = 0x3EFFBC, LENGTH = 0xE000
 }
 
-__ram_end	=	ORIGIN(ram) + LENGTH(ram);
-__eheap_end	=	ORIGIN(ram) + LENGTH(ram);
+__ram_end	=	0x3FFFFC;
+__eheap_end	=	0x3FFFFC;
 __ram_length = LENGTH(ram);
 
 __sp_svc	=	__ram_end;

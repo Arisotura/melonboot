@@ -57,70 +57,61 @@ void WUP_Init()
     *(vu32*)0xF0000008 &= ~0x1;
     *(vu32*)0xF0000030 = 0;
 
-    u32 r2, r3, r4, r5;
+    u32 reg0C;
+    u32 clktype;
     if (REG_HARDWARE_ID & (1<<16))
     {
-        *(vu32*)0xF0000400 = 0x17;
-        r5 = 0x14; r2 = 0xBC;
-        r3 = 0x24; r4 = 0;
+        // 24MHz base clock
+        REG_TIMER_PRESCALER = 23;
+        reg0C = 0x14;
+        clktype = 0;
     }
     else
     {
-        *(vu32*)0xF0000400 = 0xF;
-        r5 = 0xD; r2 = 0xBC;
-        r3 = 0x24; r4 = 1;
+        // 16MHz base clock
+        REG_TIMER_PRESCALER = 15;
+        reg0C = 0xD;
+        clktype = 1;
     }
 
-    *(vu32*)0xF0000418 = 0xFFFFFFFF;
+    REG_TIMER_TARGET(0) = 0xFFFFFFFF;
     *(vu32*)0xF0000008 = ((*(vu32*)0xF0000008) & ~6) + 2;
 
     if (!(REG_HARDWARE_ID & (1<<19)))
     {
-        *(vu32*)0xF0000410 = 2;
-        for (;;)
-        {
-            if ((*(vu32*)0xF0000414) >= 0x1395)
-                break;
-        }
-        *(vu32*)0xF0000410 = 0;
+        REG_TIMER_CNT(0) = TIMER_ENABLE;
+        while (REG_TIMER_VALUE(0) < 5013);
+        REG_TIMER_CNT(0) = 0;
     }
 
     // PLL init
 
-    *(vu32*)0xF000000C = r5;
+    *(vu32*)0xF000000C = reg0C;
     *(vu32*)0xF0000010 = 0x5E8000;
     *(vu32*)0xF0000014 = 5;
     *(vu32*)0xF0000018 = 0x1FE;
     *(vu32*)0xF000001C = 0x6C;
     *(vu32*)0xF0000020 = 0x1FE;
-    *(vu32*)0xF0000024 = r2;
-    *(vu32*)0xF0000028 = r3;
+    *(vu32*)0xF0000024 = 0xBC;
+    *(vu32*)0xF0000028 = 0x24;
     *(vu32*)0xF000002C = 0x3A1;
 
-    if (r4)
+    if (clktype)
         *(vu32*)0xF0000008 |= 0x8;
     else
         *(vu32*)0xF0000008 &= ~0x8;
 
     *(vu32*)0xF0000008 &= ~0x2;
-    *(vu32*)0xF0000410 = 0x2;
-    for (;;)
-    {
-        if ((*(vu32*)0xF0000414) >= 0x1388)
-            break;
-    }
-    *(vu32*)0xF0000410 = 0;
+
+    REG_TIMER_CNT(0) = TIMER_ENABLE;
+    while (REG_TIMER_VALUE(0) < 5000);
+    REG_TIMER_CNT(0) = 0;
+
     *(vu32*)0xF0000030 = 3;
     *(vu32*)0xF0000008 |= 0x1;
     *(vu32*)0xF0000814 = 0x5C;
     *(vu32*)0xF0000800 = 0x1011;
     *(vu32*)0xF0000800 = 0x1001;
-
-    if (!r4)
-    {
-        // *(vu32*)0xF0000008 |= 0x8;
-        // if r4 != 1 we skip UIC cmd 7F and 05
-    }
 
     EnableIRQ();
 
@@ -132,7 +123,10 @@ void WUP_Init()
     SPI_Init();
 
     Flash_Init();
-    UIC_Init();
+
+    *(vu32*)0x3FFFFC = 0;
+    if (clktype == 1)
+        UIC_Init();
 
     Input_Init();
 }

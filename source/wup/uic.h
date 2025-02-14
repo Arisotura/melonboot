@@ -5,8 +5,10 @@ u16 CRC16(u8* data, u32 len);
 int CheckCRC16(u8* data, u32 len);
 
 void UIC_Init();
+u8 UIC_IsGood();
+u8 UIC_CurState();
 
-u8 UIC_GetFirmwareType();
+u8 UIC_Sync();
 void UIC_SendCommand(u8 cmd, u8* in_data, int in_len, u8* out_data, int out_len);
 
 u32 UIC_GetFirmwareVersion();

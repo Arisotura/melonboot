@@ -1,7 +1,7 @@
 #include <wup/wup.h>
 
 
-static u8 UICGood;
+static u8 UICGood = 0;
 
 // This table defines which UIC state transitions are possible.
 // The UIC firmware uses a similar table.
@@ -23,7 +23,7 @@ const u8 StateTransitions[15][15] = {
     {1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0}
 };
 
-static u8 UICState;
+static u8 UICState = 0;
 
 
 u16 CRC16(u8* data, u32 len)
@@ -55,45 +55,46 @@ int CheckCRC16(u8* data, u32 len)
 
 void UIC_Init()
 {
-    // the bootloader writes the result of command 7F at 0x3FFFFC
-    // TODO: check command 7F also?
+    WUP_DelayMS(300);
+    u8 sync = UIC_Sync();
+    if (sync != 0x2F && sync != 0x3F)
+        return;
 
-    u8 uictype = *(u8*)0x3FFFFC;
-    if (uictype == 0x2F || uictype == 0x3F)
-        UICGood = 1;
-    else
-        UICGood = 0;
+    UICState = UIC_GetState();
+    *(u32*)0x3FFFFC = sync;
+    UICGood = 1;
+}
 
-    if (UICGood)
-    {
-        // Note on UIC initialization:
-        // When the gamepad is powered up, the UIC starts in state 11.
-        // State 11 is an idle state, where, among other things, input scanning doesn't work.
-        // One must switch the UIC to state 3 or 4 to put the gamepad in sleep mode.
-        // (TODO: what are the differences between states 3 and 4?)
-        // Then pressing the power button will wake up the gamepad, with the UIC in state 0.
-        // The wakeup event will reset the CPU.
+u8 UIC_IsGood()
+{
+    return UICGood;
+}
 
-        UICState = UIC_GetState();
-        if (UICState == 11)
-        {
-            UIC_SetState(3);
-            DisableIRQ();
-            for (;;);
-        }
-    }
+u8 UIC_CurState() // TODO better naming
+{
+    return UICState;
 }
 
 
-u8 UIC_GetFirmwareType()
+u8 UIC_Sync()
 {
     u8 buf = 0x7F;
     u8 ret = 0;
 
     SPI_Start(SPI_DEVICE_UIC, SPI_SPEED_UIC);
+    WUP_DelayMS(1);
     SPI_Write(&buf, 1);
     WUP_DelayMS(1);
-    SPI_Read(&ret, 1);
+    do
+    {
+        REG_SPI_CNT |= 0x40;
+        WUP_DelayUS(60);
+        REG_SPI_CNT &= ~0x40;
+        ret = 0;
+        SPI_Read(&ret, 1);
+    }
+    while (ret == 0);
+
     SPI_Finish();
 
     return ret;
@@ -102,7 +103,7 @@ u8 UIC_GetFirmwareType()
 
 void UIC_SendCommand(u8 cmd, u8* in_data, int in_len, u8* out_data, int out_len)
 {
-    SPI_Start(SPI_DEVICE_UIC, 0x8018);
+    SPI_Start(SPI_DEVICE_UIC, 0x835C);
 
     SPI_Write(&cmd, 1);
     if (in_data)
